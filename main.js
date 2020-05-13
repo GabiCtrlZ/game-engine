@@ -13,15 +13,79 @@ const AIR_FRICTION = GRAVITY / TERMINAL_VELOCITY
 
 // functions
 
-const addVectors = (vector1 = [], vector2 = []) => {
+// vector functions
+
+function addVectors(vector1 = [], vector2 = []) {
     return vector1.map((e, i) => (e + vector2[i]) || e)
 }
 
-const distVectors = (vector1 = [], vector2 = []) => {
+function subtractVectors(vector1 = [], vector2 = []) {
+    return vector1.map((e, i) => (e - vector2[i]) || e)
+}
+
+function distVectors(vector1 = [], vector2 = []) {
     if (vector1.length != vector2.length) return
     let dist = 0
     vector1.forEach((e, i) => dist += Math.pow(e - vector2[i], 2))
     return Math.sqrt(dist)
+}
+
+// matrix functions
+
+function vectorMatrixMultiplay(vector, matrix) {
+    if (vector.length != matrix.length) return null
+    const resultVector = []
+    for (let i = 0; i < matrix[0].length; i++) {
+        let sum = 0
+        vector.forEach((e, j) => sum += e * matrix[j][i])
+        resultVector.push(sum)
+    }
+    return resultVector
+}
+
+function rotateMatrix(degree) {
+    const rad = (degree * Math.PI) / 180
+    return [
+        [Math.cos(rad), -Math.sin(rad)],
+        [Math.sin(rad), Math.cos(rad)],
+    ]
+}
+
+function matrixTraspose(matrix) {
+    const transpose = []
+    for (let i = 0; i < matrix[0].length; i++) {
+        transpose.push(matrix.map(e => e[i]))
+    }
+    return transpose
+}
+
+// physics functions
+
+function calcAngleDegrees(vector) {
+    const x = vector[0]
+    const y = vector[1]
+    return Math.atan2(x, y) * 180 / Math.PI
+}
+
+function elasticCollisionSpeed(m1, m2, v1, v2) {
+    const u2 = (2 * m1 * v1 + m2 * v2 - m1 * v2) / (m1 + m2)
+    const u1 = v2 + u2 - v1
+    return { u1, u2 }
+}
+
+function elasticCollision(p1, p2, v1, v2, m1, m2) {
+    const p = subtractVectors(p1, p2)
+    const d = calcAngleDegrees(p)
+    const rotate = rotateMatrix(d)
+    const vRotate1 = vectorMatrixMultiplay(v1, rotate)
+    const vRotate2 = vectorMatrixMultiplay(v2, rotate)
+    const { u1, u2 } = elasticCollisionSpeed(m1, m2, vRotate1[0], vRotate2[0])
+    vRotate1[0] = u1
+    vRotate2[0] = u2
+    const transposeRotate = matrixTraspose(rotate)
+    const vFinal1 = vectorMatrixMultiplay(vRotate1, transposeRotate)
+    const vFinal2 = vectorMatrixMultiplay(vRotate2, transposeRotate)
+    return { vFinal1, vFinal2 }
 }
 
 // basic classes
@@ -149,31 +213,59 @@ class Controller {
             o.draw()
         })
     }
+
+    collisionStatic() {
+        for (let i = 0; i < this.objects.length; i++) {
+            for (let j = (i + 1); j < this.objects.length; j++) {
+                this.detectCollision(this.objects[i], this.objects[j])
+            }
+        }
+    }
+
+    detectCollision(object1, object2) {
+        if (distVectors(object1.pos, object2.pos) <= (object1.radius + object2.radius)) {
+            console.log('colission!', object1.pos)
+            object1.collision(object2)
+        }
+    }
 }
 
 // advanced classes
 class Ball extends Circle {
-    constructor(pos, radius, gravity, friction, color, borderColor) {
+    constructor(pos, radius, gravity, friction, m = 1, color, borderColor) {
         super(pos, radius, color, borderColor)
         this.dx = 0
         this.dy = 0
         this.gravity = gravity * GRAVITY
         this.friction = friction * AIR_FRICTION
+        this.m = m
     }
 
     gravityForce() {
         this.dy += this.gravity - (this.dy * this.friction)
+        this.dx += - (this.dx * this.friction)
         this.move([this.dx, this.dy])
     }
 
     frictionForce() {
 
     }
+
+    collision(object) {
+        const { m: m1, dy: vy1, dx: vx1 } = this
+        const { m: m2, dy: vy2, dx: vx2 } = object
+        const { vFinal1, vFinal2 } = elasticCollision(this.pos, object.pos, [vx1, vy1], [vx2, vy2], m1, m2)
+        this.dx = vFinal1[0]
+        this.dy = vFinal1[1]
+        object.dx = vFinal2[0]
+        object.dy = vFinal2[1]
+    }
 }
 
 // declaring objects
 
 const controller = new Controller
+controller.AddObject(new Ball([500, 500], 50, 0, 1))
 
 // initialization function
 
@@ -189,6 +281,7 @@ function animate() {
     c.clearRect(0, 0, canvas.width, canvas.height)
     controller.draw()
     controller.handleForces()
+    controller.collisionStatic()
 }
 
 init()
