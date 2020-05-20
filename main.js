@@ -73,22 +73,43 @@ function elasticCollisionSpeed(m1, m2, v1, v2) {
     return { u1, u2 }
 }
 
-function elasticCollision(p1, p2, v1, v2, m1, m2) {
+function elasticCollision(p1, p2, v1, v2, m1, m2, r1, r2) {
     const p = subtractVectors(p1, p2)
-    const d = calcAngleDegrees(p) + 90
-    const rotate = rotateMatrix(d)
+    const dist = Math.sqrt(Math.pow(p[0], 2) + Math.pow(p[1], 2))
+    const overlap = r1 + r2 - dist
+    const degree = calcAngleDegrees(p) + 90
+    const rotate = rotateMatrix(degree)
     const vRotate1 = vectorMatrixMultiplay(v1, rotate)
     const vRotate2 = vectorMatrixMultiplay(v2, rotate)
     const { u1, u2 } = elasticCollisionSpeed(m1, m2, vRotate1[0], vRotate2[0])
-    console.log({ rotate, v1, v2, d, vRotate1, vRotate2, u1, u2 })
-    console.log(vRotate1[0], vRotate2[0])
     vRotate1[0] = u1
     vRotate2[0] = u2
     const transposeRotate = matrixTraspose(rotate)
     const vFinal1 = vectorMatrixMultiplay(vRotate1, transposeRotate)
     const vFinal2 = vectorMatrixMultiplay(vRotate2, transposeRotate)
-    console.log({ vFinal1, vFinal2 })
-    return { vFinal1, vFinal2 }
+    const overlapVector = vectorMatrixMultiplay([overlap, 0], transposeRotate)
+    return { vFinal1, vFinal2, overlapVector }
+}
+
+function stationeryCheck(object1, object2, overlapVector) {
+    // VERY IMPORTENT! the object that's firing the elastic collision should ALWAYS be object1
+    if (object1.stationery) {
+        object2.pos[0] += (overlapVector[0])
+        object2.pos[1] -= (overlapVector[1])
+    }
+
+    else if (object2.stationery) {
+        object1.pos[0] -= (overlapVector[0])
+        object1.pos[1] += (overlapVector[1])
+    }
+
+    else {
+        object1.pos[0] -= (overlapVector[0] / 2)
+        object1.pos[1] += (overlapVector[1] / 2)
+        object2.pos[0] += (overlapVector[0] / 2)
+        object2.pos[1] -= (overlapVector[1] / 2)
+    }
+
 }
 
 // basic classes
@@ -235,13 +256,14 @@ class Controller {
 
 // advanced classes
 class Ball extends Circle {
-    constructor(pos, radius, gravity, friction, m = 1, color, borderColor) {
+    constructor(pos, radius, gravity, friction, m = 1, stationery = false, color, borderColor) {
         super(pos, radius, color, borderColor)
         this.dx = 0
         this.dy = 0
         this.gravity = gravity * GRAVITY
         this.friction = friction * AIR_FRICTION
         this.m = m
+        this.stationery = stationery
     }
 
     gravityForce() {
@@ -257,7 +279,8 @@ class Ball extends Circle {
     collision(object) {
         const { m: m1, dy: vy1, dx: vx1 } = this
         const { m: m2, dy: vy2, dx: vx2 } = object
-        const { vFinal1, vFinal2 } = elasticCollision(this.pos, object.pos, [vx1, vy1], [vx2, vy2], m1, m2)
+        const { vFinal1, vFinal2, overlapVector } = elasticCollision(this.pos, object.pos, [vx1, vy1], [vx2, vy2], m1, m2, this.radius, object.radius)
+        stationeryCheck(this, object, overlapVector)
         this.dx = -vFinal1[0]
         this.dy = vFinal1[1]
         object.dx = -vFinal2[0]
@@ -268,7 +291,7 @@ class Ball extends Circle {
 // declaring objects
 
 const controller = new Controller
-controller.AddObject(new Ball([500, 500], 50, 0, 0.5))
+controller.AddObject(new Ball([500, 500], 50, 0, 0.5, 100000000, true))
 
 // initialization function
 
